@@ -29,6 +29,7 @@ export type TaskListProps = TaskListType & {
 	eventName?: string;
 	twoColumns?: boolean;
 	keepCompletedTaskList?: boolean;
+	cesHeader?: boolean;
 };
 
 export const TaskList: React.FC< TaskListProps > = ( {

@@ -24,6 +24,7 @@ import TwoColumnTaskListPlaceholder from '../two-column-tasks/placeholder';
 import '../two-column-tasks/style.scss';
 import { getAdminSetting } from '~/utils/admin-settings';
 import { SectionedTaskListPlaceholder } from '~/two-column-tasks/sectioned-task-list-placeholder';
+import { ALLOW_TRACKING_OPTION_NAME } from '../two-column-tasks/task-list';
 
 export type TasksProps = {
 	query: { task?: string };
@@ -62,6 +63,8 @@ export const Tasks: React.FC< TasksProps > = ( { query } ) => {
 	);
 
 	const { isResolving, taskLists } = useSelect( ( select ) => {
+		const { getOption } = select( OPTIONS_STORE_NAME );
+		getOption( ALLOW_TRACKING_OPTION_NAME );
 		return {
 			isResolving: ! select(
 				ONBOARDING_STORE_NAME
