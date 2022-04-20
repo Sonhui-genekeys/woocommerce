@@ -19,6 +19,7 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 	 */
 	public static function get_orders_table_name() {
 		global $wpdb;
+
 		return $wpdb->prefix . 'wc_orders';
 	}
 
@@ -29,6 +30,7 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 	 */
 	public static function get_addresses_table_name() {
 		global $wpdb;
+
 		return $wpdb->prefix . 'wc_order_addresses';
 	}
 
@@ -39,6 +41,7 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 	 */
 	public static function get_operational_data_table_name() {
 		global $wpdb;
+
 		return $wpdb->prefix . 'wc_order_operational_data';
 	}
 
@@ -49,6 +52,7 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 	 */
 	public static function get_meta_table_name() {
 		global $wpdb;
+
 		return $wpdb->prefix . 'wc_orders_meta';
 	}
 
@@ -63,6 +67,67 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 			$this->get_addresses_table_name(),
 			$this->get_operational_data_table_name(),
 			$this->get_meta_table_name(),
+		);
+	}
+
+	public function get_order_table_columns_and_placeholders() {
+		return array(
+			'id'                   => '%d',
+			'status'               => '%s',
+			'currency'             => '%s',
+			'tax_amount'           => '%f',
+			'total_amount'         => '%f',
+			'customer_id'          => '%d',
+			'billing_email'        => '%s',
+			'date_created_gmt'     => '%s',
+			'date_updated_gmt'     => '%s',
+			'parent_order_id'      => '%d',
+			'payment_method'       => '%s',
+			'payment_method_title' => '%s',
+			'transaction_id'       => '%s',
+			'ip_address'           => '%s',
+			'user_agent'           => '%s',
+		);
+	}
+
+	public function get_address_table_columns_and_placeholders() {
+		return array(
+			'id'           => '%d',
+			'order_id'     => '%d',
+			'address_type' => '%s',
+			'first_name'   => '%s',
+			'last_name'    => '%s',
+			'company'      => '%s',
+			'address_1'    => '%s',
+			'address_2'    => '%s',
+			'city'         => '%s',
+			'state'        => '%s',
+			'postcode'     => '%s',
+			'country'      => '%s',
+			'email'        => '%s',
+			'phone'        => '%s',
+		);
+	}
+
+	public function get_operational_data_table_columns_and_placeholders() {
+		return array(
+			'id'                          => '%d',
+			'order_id'                    => '%d',
+			'created_via'                 => '%s',
+			'woocommerce_version'         => '%s',
+			'prices_include_tax'          => '%d',
+			'coupon_usages_are_counted'   => '%d',
+			'download_permission_granted' => '%d',
+			'cart_hash'                   => '%s',
+			'new_order_email_sent'        => '%d',
+			'order_key'                   => '%s',
+			'order_stock_reduced'         => '%d',
+			'date_paid_gmt'               => '%s',
+			'date_completed_gmt'          => '%s',
+			'shipping_tax_amount'         => '%f',
+			'shipping_total_amount'       => '%f',
+			'discount_tax_amount'         => '%f',
+			'discount_total_amount'       => '%f',
 		);
 	}
 
@@ -141,6 +206,127 @@ class OrdersTableDataStore extends \Abstract_WC_Order_Data_Store_CPT implements 
 		// TODO: Implement get_order_type() method.
 		return 'shop_order';
 	}
+
+	/**
+	 * @param \WC_Order $order
+	 */
+	public function read( &$order ) {
+		if ( ! $order->get_id() ) {
+			throw new \Exception( __( 'ID must be set for an order to be read', 'woocommerce' ) );
+		}
+		// TODO: Load from cache if available, and return early.
+		$order_data = $this->get_order_data_for_id( $order->get_id() );
+		$order->set_props(
+			array(
+				'status'        => $order_data->status,
+				'currency'      => $order_data->currency,
+				'cart_tax'      => $order_data->tax_amount,
+				'total'         => $order_data->total_amount,
+				'customer_id'   => $order_data->customer_id,
+				'billing_email' => $order_data->billing_email,
+				'date_created' => $order_data->date_created_gmt,
+				'date_modified' => $order_data->date_updated_gmt,
+				'parent_id' => $order_data->parent_order_id,
+				'payment_method' => $order_data->payment_method,
+				'payment_method_title' => $order_data->payment_method_title,
+				'transaction_id' => $order_data->transaction_id,
+				'customer_ip_address' => $order_data->ip_address,
+				'customer_user_agent' => $order_data->user_agent,
+				'billing' => array(
+
+				),
+				'shipping' => array(
+
+				),
+			)
+		);
+
+		// TODO: Set cache.
+	}
+
+	private function get_order_data_for_id( $id ) {
+		$results = $this->get_order_data_for_ids( array( $id ) );
+
+		return $results[0];
+	}
+
+	private function get_order_data_for_ids( $ids ) {
+		global $wpdb;
+		$wpdb->flush();
+		$order_table_query = $this->get_order_table_select_statement();
+		$id_placeholder    = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"$order_table_query WHERE wc_order.id in ( $id_placeholder )",
+				$ids
+			)
+		);
+	}
+
+	private function get_order_table_select_statement() {
+		$order_table                  = $this::get_orders_table_name();
+		$order_table_alias            = 'wc_order';
+		$select_clause                = "$order_table_alias." . implode( ", $order_table_alias.", array_keys( $this->get_order_table_columns_and_placeholders() ) );
+		$billing_address_table_alias  = 'address_billing';
+		$shipping_address_table_alias = 'address_shipping';
+		$op_data_table_alias          = 'order_operational_data';
+		list( $billing_address_select_clause, $billing_address_join_clause ) = $this->join_billing_address_table_to_order_query( $order_table_alias, $billing_address_table_alias, );
+		list( $shipping_address_select_clause, $shipping_address_join_clause ) = $this->join_shipping_address_table_to_order_query( $order_table_alias, $shipping_address_table_alias );
+		list( $operational_data_select_clause, $operational_data_join_clause ) = $this->join_operational_data_table_to_order_query( $order_table_alias, $op_data_table_alias );
+
+		return
+			"
+SELECT $select_clause, $billing_address_select_clause, $shipping_address_select_clause, $operational_data_select_clause
+FROM $order_table $order_table_alias
+LEFT JOIN $billing_address_join_clause
+LEFT JOIN $shipping_address_join_clause
+LEFT JOIN $operational_data_join_clause
+";
+	}
+
+	private function join_billing_address_table_to_order_query( $order_table_alias, $address_table_alias ) {
+		return $this->join_address_table_order_query( 'billing', $order_table_alias, $address_table_alias );
+	}
+
+	private function join_shipping_address_table_to_order_query( $order_table_alias, $address_table_alias ) {
+		return $this->join_address_table_order_query( 'shipping', $order_table_alias, $address_table_alias );
+	}
+
+	private function join_address_table_order_query( $address_type, $order_table_alias, $address_table_alias ) {
+		global $wpdb;
+		$address_table = $this::get_addresses_table_name();
+		$columns       = array_keys( $this->get_address_table_columns_and_placeholders() );
+		list( $select_clause, $join_clause ) = $this->generate_select_and_join_clauses( $order_table_alias, $address_table, $address_table_alias, $columns );
+		$join_clause = $wpdb->prepare(
+			"$join_clause AND $address_table_alias.address_type = %s",
+			$address_type
+		);
+
+		return array( $select_clause, $join_clause );
+	}
+
+	private function join_operational_data_table_to_order_query( $order_table_alias, $operational_table_alias ) {
+		$operational_data_table = $this::get_operational_data_table_name();
+
+		return $this->generate_select_and_join_clauses(
+			$order_table_alias,
+			$operational_data_table,
+			$operational_table_alias,
+			array_keys( $this->get_operational_data_table_columns_and_placeholders() ) );
+	}
+
+	private function generate_select_and_join_clauses( $order_table_alias, $table, $table_alias, $columns ) {
+		// Add aliases to column names so they will be unique when fetching.
+		$columns = array_map( function ( $column ) use ( $table_alias ) {
+			return "$table_alias.$column as {$table_alias}_$column";
+		}, $columns );
+		$select_clause = implode( ', ', $columns );
+		$join_clause   = "$table $table_alias ON $table_alias.order_id = $order_table_alias.id";
+
+		return array( $select_clause, $join_clause );
+	}
+
 
 	/**
 	 * @param \WC_Order $order
@@ -237,7 +423,8 @@ CREATE TABLE $addresses_table_name (
 	country text null,
 	email varchar(320) null,
 	phone varchar(100) null,
-	KEY order_id (order_id)
+	KEY order_id (order_id),
+	KEY address_type_order_id (address_type, order_id)
 );
 CREATE TABLE $operational_data_table_name (
 	id bigint(20) unsigned auto_increment primary key,
